@@ -32,6 +32,8 @@ Resources:
   # ==========================
   ResumeBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub "internpilot-resumes-${AWS::AccountId}"
 
@@ -82,6 +84,30 @@ Resources:
           Properties:
             Path: /resume/upload-url
             Method: post
+
+    # ==========================
+  # Resume Processor Lambda
+  # ==========================
+  ResumeProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: resume_processor/
+      Handler: app.lambda_handler
+
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+      Events:
+        ResumeUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref ResumeBucket
+            Events: s3:ObjectCreated:*
 
 Outputs:
 
