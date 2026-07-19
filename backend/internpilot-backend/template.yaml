@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: InternPilot Backend
+
+Globals:
+  Function:
+    Timeout: 10
+    Runtime: python3.12
+
+Resources:
+
+  # ==========================
+  # DynamoDB Table
+  # ==========================
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: InternPilotUsers
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+
+  # ==========================
+  # User Lambda
+  # ==========================
+  UserFunction:
+    Type: AWS::Serverless::Function
+
+    Properties:
+      CodeUri: user_api/
+      Handler: app.lambda_handler
+
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref UsersTable
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+
+      Events:
+        CreateUser:
+          Type: Api
+          Properties:
+            Path: /users
+            Method: post
+
+Outputs:
+
+  UserApi:
+    Description: User API
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/users"
+
+  DynamoDBTable:
+    Description: Users Table
+    Value: !Ref UsersTable
