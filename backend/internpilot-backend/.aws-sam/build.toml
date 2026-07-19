@@ -9,4 +9,13 @@ manifest_hash = "1861be9efa0d055614dbdd09b12dd0bb"
 packagetype = "Zip"
 functions = ["UserFunction"]
 
+[function_build_definitions.bb3df924-4ac7-46de-837f-feaa0c15e16c]
+codeuri = "C:\\Users\\ASUS\\Desktop\\internpilot-ai\\internpilot-ai\\backend\\internpilot-backend\\resume_api"
+runtime = "python3.12"
+architecture = "x86_64"
+handler = "app.lambda_handler"
+manifest_hash = "1861be9efa0d055614dbdd09b12dd0bb"
+packagetype = "Zip"
+functions = ["ResumeFunction"]
+
 [layer_build_definitions]

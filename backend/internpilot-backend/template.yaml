@@ -28,11 +28,18 @@ Resources:
           KeyType: HASH
 
   # ==========================
+  # S3 Bucket
+  # ==========================
+  ResumeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "internpilot-resumes-${AWS::AccountId}"
+
+  # ==========================
   # User Lambda
   # ==========================
   UserFunction:
     Type: AWS::Serverless::Function
-
     Properties:
       CodeUri: user_api/
       Handler: app.lambda_handler
@@ -52,12 +59,44 @@ Resources:
             Path: /users
             Method: post
 
+  # ==========================
+  # Resume Upload Lambda
+  # ==========================
+  ResumeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: resume_api/
+      Handler: app.lambda_handler
+
+      Environment:
+        Variables:
+          RESUME_BUCKET: !Ref ResumeBucket
+
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref ResumeBucket
+
+      Events:
+        UploadResume:
+          Type: Api
+          Properties:
+            Path: /resume/upload-url
+            Method: post
+
 Outputs:
 
   UserApi:
     Description: User API
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/users"
 
+  ResumeApi:
+    Description: Resume Upload API
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/resume/upload-url"
+
   DynamoDBTable:
     Description: Users Table
     Value: !Ref UsersTable
+
+  ResumeBucketName:
+    Description: Resume Bucket
+    Value: !Ref ResumeBucket

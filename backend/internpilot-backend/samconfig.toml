@@ -3,7 +3,7 @@
 version = 0.1
 
 [default.global.parameters]
-stack_name = "internpilot-backend"
+stack_name = "internpilot"
 region = "ap-south-1"
 
 [default.build.parameters]
