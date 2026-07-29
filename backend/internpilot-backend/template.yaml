@@ -5,7 +5,8 @@ Description: InternPilot Backend
 
 Globals:
   Function:
-    Timeout: 10
+    Timeout: 30
+    MemorySize: 512
     Runtime: python3.12
 
 Resources:
@@ -101,13 +102,9 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
-
-      Events:
-        ResumeUploaded:
-          Type: S3
-          Properties:
-            Bucket: !Ref ResumeBucket
-            Events: s3:ObjectCreated:*
+      
+        - S3ReadPolicy:
+            BucketName: !Ref ResumeBucket
 
 Outputs:
 

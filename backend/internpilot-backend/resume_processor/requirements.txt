@@ -2,3 +2,4 @@ requests
 boto3
 pypdf
 boto3
+PyMuPDF

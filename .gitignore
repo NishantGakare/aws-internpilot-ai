@@ -1,0 +1,220 @@
+# ==========================================
+# Python
+# ==========================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python packaging
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Test / Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+
+# ==========================================
+# Environment Variables / Secrets
+# ==========================================
+
+.env
+.env.*
+!.env.example
+
+# AWS credentials
+.aws/
+.aws-sam/
+
+# Never commit credentials
+credentials
+credentials.*
+*.pem
+*.key
+
+
+# ==========================================
+# AWS SAM
+# ==========================================
+
+.aws-sam/
+
+# SAM build artifacts
+**/.aws-sam/
+**/.aws-sam/build/
+**/.aws-sam/deps/
+
+# SAM packaged files
+packaged.yaml
+packaged.yml
+
+
+# ==========================================
+# AWS / CloudFormation
+# ==========================================
+
+# CloudFormation generated files
+*-packaged.yaml
+*-packaged.yml
+
+
+# ==========================================
+# Node.js / Frontend
+# ==========================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+
+# Vite
+.vite/
+
+# Next.js
+.next/
+out/
+
+# React
+.cache/
+
+
+# ==========================================
+# IDE / Editors
+# ==========================================
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.idea/
+*.iml
+
+# Visual Studio
+.vs/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+
+# ==========================================
+# Operating System
+# ==========================================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+
+# ==========================================
+# Logs
+# ==========================================
+
+*.log
+logs/
+
+
+# ==========================================
+# Database / Local Files
+# ==========================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+
+# ==========================================
+# Temporary Files
+# ==========================================
+
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.old
+
+tmp/
+temp/
+
+
+# ==========================================
+# Large / Generated Files
+# ==========================================
+
+*.zip
+*.tar
+*.gz
+
+# PDF files - Uncomment if you don't want
+# resumes or documents committed to Git
+# *.pdf
+
+
+# ==========================================
+# AWS SAM Local
+# ==========================================
+
+events/local/
+.sam/
+
+
+# ==========================================
+# Terraform (if used later)
+# ==========================================
+
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+
+# ==========================================
+# Serverless / Deployment
+# ==========================================
+
+.serverless/
+
+
+# ==========================================
+# Miscellaneous
+# ==========================================
+
+.DS_Store
+*.orig
