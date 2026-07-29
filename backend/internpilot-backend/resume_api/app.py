@@ -6,114 +6,490 @@ import boto3
 from botocore.config import Config
 
 
-AWS_REGION = "ap-south-1"
+# ============================================================
+# AWS CONFIGURATION
+# ============================================================
+
+AWS_REGION = os.environ.get(
+    "AWS_REGION",
+    "ap-south-1"
+)
+
+
+# ============================================================
+# S3 CLIENT
+# ============================================================
 
 s3 = boto3.client(
+
     "s3",
+
     region_name=AWS_REGION,
+
     config=Config(
+
         signature_version="s3v4",
+
         s3={
             "addressing_style": "virtual"
         }
+
     )
+
 )
 
-BUCKET_NAME = os.environ["RESUME_BUCKET"]
+
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
+
+BUCKET_NAME = os.environ[
+    "RESUME_BUCKET"
+]
 
 
-def lambda_handler(event, context):
+# ============================================================
+# LAMBDA HANDLER
+# ============================================================
+
+def lambda_handler(
+    event,
+    context
+):
+
+    print(
+        "========== RESUME UPLOAD API =========="
+    )
+
+    print(
+        "========== RAW EVENT =========="
+    )
+
+    print(
+        json.dumps(
+            event,
+            indent=2
+        )
+    )
+
+    print(
+        "========== END RAW EVENT =========="
+    )
+
 
     try:
 
-        body = json.loads(
-            event.get("body", "{}")
+        # ====================================================
+        # PARSE REQUEST BODY
+        # ====================================================
+
+        body = event.get(
+            "body",
+            "{}"
         )
 
-        # Get user ID
-        user_id = body.get("user_id")
 
-        # Get original filename
-        filename = body.get("filename")
+        # API Gateway normally sends body as a string
 
-        # Validate user ID
-        if not user_id:
+        if isinstance(
+            body,
+            str
+        ):
+
+            body = json.loads(
+                body
+            )
+
+
+        # Make sure body is a dictionary
+
+        if not isinstance(
+            body,
+            dict
+        ):
 
             return {
-                "statusCode": 400,
-                "body": json.dumps({
-                    "success": False,
-                    "message": "user_id is required"
-                })
+
+                "statusCode":
+                    400,
+
+                "headers": {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                "body":
+                    json.dumps({
+
+                        "success":
+                            False,
+
+                        "message":
+                            "Request body must be a valid JSON object"
+
+                    })
+
             }
 
-        # Validate filename
+
+        # ====================================================
+        # GET FILENAME
+        # ====================================================
+
+        filename = body.get(
+            "filename"
+        )
+
+
+        # ====================================================
+        # GET USER ID
+        # ====================================================
+
+        user_id = body.get(
+            "user_id"
+        )
+
+
+        # ====================================================
+        # VALIDATE FILENAME
+        # ====================================================
+
         if not filename:
 
             return {
-                "statusCode": 400,
-                "body": json.dumps({
-                    "success": False,
-                    "message": "filename is required"
-                })
+
+                "statusCode":
+                    400,
+
+                "headers": {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                "body":
+                    json.dumps({
+
+                        "success":
+                            False,
+
+                        "message":
+                            "filename is required"
+
+                    })
+
             }
 
-        # Get file extension
-        extension = filename.split(".")[-1].lower()
 
-        # Allow only PDF
-        if extension != "pdf":
+        # ====================================================
+        # VALIDATE USER ID
+        # ====================================================
+
+        if not user_id:
 
             return {
-                "statusCode": 400,
-                "body": json.dumps({
-                    "success": False,
-                    "message": "Only PDF files are allowed"
-                })
+
+                "statusCode":
+                    400,
+
+                "headers": {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                "body":
+                    json.dumps({
+
+                        "success":
+                            False,
+
+                        "message":
+                            "user_id is required"
+
+                    })
+
             }
 
-        # Generate unique S3 key
+
+        # ====================================================
+        # CLEAN VALUES
+        # ====================================================
+
+        filename = str(
+            filename
+        ).strip()
+
+
+        user_id = str(
+            user_id
+        ).strip()
+
+
+        # ====================================================
+        # VALIDATE USER ID
+        # ====================================================
+
+        if not user_id:
+
+            return {
+
+                "statusCode":
+                    400,
+
+                "headers": {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                "body":
+                    json.dumps({
+
+                        "success":
+                            False,
+
+                        "message":
+                            "user_id cannot be empty"
+
+                    })
+
+            }
+
+
+        # ====================================================
+        # ONLY ALLOW PDF FILES
+        # ====================================================
+
+        if not filename.lower().endswith(
+            ".pdf"
+        ):
+
+            return {
+
+                "statusCode":
+                    400,
+
+                "headers": {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                "body":
+                    json.dumps({
+
+                        "success":
+                            False,
+
+                        "message":
+                            "Only PDF files are allowed"
+
+                    })
+
+            }
+
+
+        # ====================================================
+        # GENERATE UNIQUE FILE NAME
+        # ====================================================
+
+        unique_filename = (
+
+            f"{uuid.uuid4()}.pdf"
+
+        )
+
+
+        # ====================================================
+        # GENERATE S3 OBJECT KEY
+        # ====================================================
+
+        # Format:
+        #
+        # resumes/{user_id}/{uuid}.pdf
+        #
+        # Example:
+        #
+        # resumes/abc-123/550e8400-e29b-41d4-a716-446655440000.pdf
+
         file_key = (
+
             f"resumes/"
             f"{user_id}/"
-            f"{uuid.uuid4()}.pdf"
+            f"{unique_filename}"
+
         )
 
-        # Generate presigned URL
-        upload_url = s3.generate_presigned_url(
-            ClientMethod="put_object",
-            Params={
-                "Bucket": BUCKET_NAME,
-                "Key": file_key,
-                "ContentType": "application/pdf"
-            },
-            ExpiresIn=300,
-            HttpMethod="PUT"
+
+        print(
+            f"User ID: {user_id}"
         )
+
+
+        print(
+            f"Generated S3 Key: {file_key}"
+        )
+
+
+        # ====================================================
+        # GENERATE PRESIGNED PUT URL
+        # ====================================================
+
+        upload_url = (
+
+            s3.generate_presigned_url(
+
+                ClientMethod=
+                    "put_object",
+
+                Params={
+
+                    "Bucket":
+                        BUCKET_NAME,
+
+                    "Key":
+                        file_key,
+
+                    "ContentType":
+                        "application/pdf"
+
+                },
+
+                ExpiresIn=
+                    300,
+
+                HttpMethod=
+                    "PUT"
+
+            )
+
+        )
+
+
+        print(
+            "Presigned URL generated successfully"
+        )
+
+
+        # ====================================================
+        # RETURN RESPONSE
+        # ====================================================
 
         return {
-            "statusCode": 200,
+
+            "statusCode":
+                200,
+
             "headers": {
-                "Content-Type": "application/json"
+
+                "Content-Type":
+                    "application/json",
+
+                "Access-Control-Allow-Origin":
+                    "*",
+
+                "Access-Control-Allow-Headers":
+                    "Content-Type",
+
+                "Access-Control-Allow-Methods":
+                    "POST,OPTIONS"
+
             },
-            "body": json.dumps({
-                "success": True,
-                "message": "Upload URL generated successfully",
-                "uploadUrl": upload_url,
-                "fileKey": file_key,
-                "userId": user_id
-            })
+
+            "body":
+                json.dumps({
+
+                    "success":
+                        True,
+
+                    "message":
+                        "Presigned upload URL generated successfully",
+
+                    "user_id":
+                        user_id,
+
+                    "originalFilename":
+                        filename,
+
+                    "uploadUrl":
+                        upload_url,
+
+                    "fileKey":
+                        file_key
+
+                })
+
         }
+
+
+    # ========================================================
+    # ERROR HANDLING
+    # ========================================================
+
+    except json.JSONDecodeError:
+
+        print(
+            "Invalid JSON request body"
+        )
+
+
+        return {
+
+            "statusCode":
+                400,
+
+            "headers": {
+                "Content-Type":
+                    "application/json"
+            },
+
+            "body":
+                json.dumps({
+
+                    "success":
+                        False,
+
+                    "message":
+                        "Invalid JSON request body"
+
+                })
+
+        }
+
 
     except Exception as e:
 
-        print("ERROR:")
-        print(str(e))
+        print(
+            "========== ERROR =========="
+        )
+
+
+        print(
+            str(e)
+        )
+
+
+        print(
+            "============================"
+        )
+
 
         return {
-            "statusCode": 500,
-            "body": json.dumps({
-                "success": False,
-                "message": str(e)
-            })
+
+            "statusCode":
+                500,
+
+            "headers": {
+                "Content-Type":
+                    "application/json"
+            },
+
+            "body":
+                json.dumps({
+
+                    "success":
+                        False,
+
+                    "message":
+                        str(e)
+
+                })
+
         }

@@ -5,17 +5,19 @@ Description: InternPilot Backend
 
 Globals:
   Function:
+    Runtime: python3.12
     Timeout: 30
     MemorySize: 512
-    Runtime: python3.12
 
 Resources:
 
-  # ==========================
-  # DynamoDB Table
-  # ==========================
+  # ============================================================
+  # DYNAMODB USERS TABLE
+  # ============================================================
+
   UsersTable:
     Type: AWS::DynamoDB::Table
+
     Properties:
       TableName: InternPilotUsers
       BillingMode: PAY_PER_REQUEST
@@ -28,21 +30,40 @@ Resources:
         - AttributeName: user_id
           KeyType: HASH
 
-  # ==========================
-  # S3 Bucket
-  # ==========================
+
+  # ============================================================
+  # S3 RESUME BUCKET
+  #
+  # S3 sends Object Created events to EventBridge.
+  #
+  # IMPORTANT:
+  # No LambdaConfigurations here.
+  # This prevents circular dependencies.
+  # ============================================================
+
   ResumeBucket:
     Type: AWS::S3::Bucket
+
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
+
     Properties:
       BucketName: !Sub "internpilot-resumes-${AWS::AccountId}"
 
-  # ==========================
-  # User Lambda
-  # ==========================
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+
+
+  # ============================================================
+  # USER FUNCTION
+  #
+  # POST /users
+  # ============================================================
+
   UserFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: user_api/
       Handler: app.lambda_handler
@@ -58,15 +79,24 @@ Resources:
       Events:
         CreateUser:
           Type: Api
+
           Properties:
             Path: /users
             Method: post
 
-  # ==========================
-  # Resume Upload Lambda
-  # ==========================
+
+  # ============================================================
+  # RESUME UPLOAD FUNCTION
+  #
+  # POST /resume/upload-url
+  #
+  # Generates presigned URL.
+  # Frontend uploads PDF directly to S3.
+  # ============================================================
+
   ResumeFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: resume_api/
       Handler: app.lambda_handler
@@ -82,15 +112,31 @@ Resources:
       Events:
         UploadResume:
           Type: Api
+
           Properties:
             Path: /resume/upload-url
             Method: post
 
-    # ==========================
-  # Resume Processor Lambda
-  # ==========================
+
+  # ============================================================
+  # RESUME PROCESSOR FUNCTION
+  #
+  # Triggered by EventBridge after PDF upload.
+  #
+  # S3
+  #  ↓
+  # EventBridge
+  #  ↓
+  # ResumeProcessorFunction
+  #  ↓
+  # Groq
+  #  ↓
+  # DynamoDB
+  # ============================================================
+
   ResumeProcessorFunction:
     Type: AWS::Serverless::Function
+
     Properties:
       CodeUri: resume_processor/
       Handler: app.lambda_handler
@@ -98,42 +144,145 @@ Resources:
       Environment:
         Variables:
           USERS_TABLE: !Ref UsersTable
-          GEMINI_SECRET_NAME: internpilot/gemini-api-key
+          GROQ_SECRET_NAME: internpilot/groq-api-key
 
       Policies:
+
+        # DynamoDB access
         - DynamoDBCrudPolicy:
             TableName: !Ref UsersTable
-      
+
+        # S3 read access
         - S3ReadPolicy:
             BucketName: !Ref ResumeBucket
 
+        # Secrets Manager access
         - Statement:
-          - Effect: Allow
-            Action:
-              - secretsmanager:GetSecretValue
-            Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:internpilot/gemini-api-key*"
+            - Effect: Allow
 
-    Events:
-      ResumeUploaded:
-        Type: S3
-        Properties:
-          Bucket: !Ref ResumeBucket
-          Events: s3:ObjectCreated:*
+              Action:
+                - secretsmanager:GetSecretValue
+
+              Resource:
+                - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:internpilot/groq-api-key*"
+
+
+  # ============================================================
+  # EVENTBRIDGE RULE
+  #
+  # Detects new objects uploaded to ResumeBucket.
+  #
+  # Only objects inside:
+  #
+  # resumes/
+  #
+  # are processed.
+  # ============================================================
+
+  ResumeUploadEventRule:
+    Type: AWS::Events::Rule
+
+    Properties:
+      Description: >
+        Trigger resume processor when a PDF is uploaded
+        to the InternPilot resume bucket
+
+      State: ENABLED
+
+      EventPattern:
+        source:
+          - aws.s3
+
+        detail-type:
+          - Object Created
+
+        detail:
+          bucket:
+            name:
+              - !Ref ResumeBucket
+
+          object:
+            key:
+              - prefix: resumes/
+
+      Targets:
+
+        - Arn: !GetAtt ResumeProcessorFunction.Arn
+          Id: ResumeProcessorTarget
+
+
+  # ============================================================
+  # ALLOW EVENTBRIDGE TO INVOKE LAMBDA
+  # ============================================================
+
+  ResumeProcessorEventBridgePermission:
+    Type: AWS::Lambda::Permission
+
+    Properties:
+      FunctionName: !Ref ResumeProcessorFunction
+
+      Action: lambda:InvokeFunction
+
+      Principal: events.amazonaws.com
+
+      SourceArn: !GetAtt ResumeUploadEventRule.Arn
+
+
+# ============================================================
+# OUTPUTS
+# ============================================================
 
 Outputs:
 
+  # ============================================================
+  # USER API
+  # ============================================================
+
   UserApi:
-    Description: User API
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/users"
+    Description: User API endpoint
+
+    Value: !Sub
+      - "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/users"
+      - {}
+
+
+  # ============================================================
+  # RESUME API
+  # ============================================================
 
   ResumeApi:
-    Description: Resume Upload API
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/resume/upload-url"
+    Description: Resume Upload API endpoint
+
+    Value: !Sub
+      - "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/resume/upload-url"
+      - {}
+
+
+  # ============================================================
+  # DYNAMODB
+  # ============================================================
 
   DynamoDBTable:
-    Description: Users Table
+    Description: InternPilot Users DynamoDB Table
+
     Value: !Ref UsersTable
 
+
+  # ============================================================
+  # S3 BUCKET
+  # ============================================================
+
   ResumeBucketName:
-    Description: Resume Bucket
+    Description: InternPilot Resume S3 Bucket
+
     Value: !Ref ResumeBucket
+
+
+  # ============================================================
+  # RESUME PROCESSOR
+  # ============================================================
+
+  ResumeProcessorFunctionName:
+    Description: Resume Processor Lambda Function
+
+    Value: !Ref ResumeProcessorFunction
