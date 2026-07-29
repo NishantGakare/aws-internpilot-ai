@@ -98,6 +98,7 @@ Resources:
       Environment:
         Variables:
           USERS_TABLE: !Ref UsersTable
+          GEMINI_SECRET_NAME: internpilot/gemini-api-key
 
       Policies:
         - DynamoDBCrudPolicy:
@@ -105,6 +106,19 @@ Resources:
       
         - S3ReadPolicy:
             BucketName: !Ref ResumeBucket
+
+        - Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:internpilot/gemini-api-key*"
+
+    Events:
+      ResumeUploaded:
+        Type: S3
+        Properties:
+          Bucket: !Ref ResumeBucket
+          Events: s3:ObjectCreated:*
 
 Outputs:
 

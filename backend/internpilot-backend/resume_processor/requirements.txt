@@ -3,3 +3,4 @@ boto3
 pypdf
 boto3
 PyMuPDF
+google-genai
