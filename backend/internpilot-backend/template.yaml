@@ -3,17 +3,25 @@ Transform: AWS::Serverless-2016-10-31
 
 Description: InternPilot Backend
 
+# ============================================================
+# GLOBAL FUNCTION SETTINGS
+# ============================================================
+
 Globals:
   Function:
     Runtime: python3.12
     Timeout: 30
     MemorySize: 512
 
+# ============================================================
+# RESOURCES
+# ============================================================
+
 Resources:
 
-  # ============================================================
+  # ==========================================================
   # DYNAMODB USERS TABLE
-  # ============================================================
+  # ==========================================================
 
   UsersTable:
     Type: AWS::DynamoDB::Table
@@ -31,7 +39,31 @@ Resources:
           KeyType: HASH
 
 
-  # ============================================================
+  # ==========================================================
+  # DYNAMODB JOBS TABLE
+  #
+  # Stores internships/jobs collected by InternPilot.
+  #
+  # job_id is the unique identifier for every job.
+  # ==========================================================
+
+  JobsTable:
+    Type: AWS::DynamoDB::Table
+
+    Properties:
+      TableName: InternPilotJobs
+      BillingMode: PAY_PER_REQUEST
+
+      AttributeDefinitions:
+        - AttributeName: job_id
+          AttributeType: S
+
+      KeySchema:
+        - AttributeName: job_id
+          KeyType: HASH
+
+
+  # ==========================================================
   # S3 RESUME BUCKET
   #
   # S3 sends Object Created events to EventBridge.
@@ -39,7 +71,7 @@ Resources:
   # IMPORTANT:
   # No LambdaConfigurations here.
   # This prevents circular dependencies.
-  # ============================================================
+  # ==========================================================
 
   ResumeBucket:
     Type: AWS::S3::Bucket
@@ -55,11 +87,11 @@ Resources:
           EventBridgeEnabled: true
 
 
-  # ============================================================
+  # ==========================================================
   # USER FUNCTION
   #
   # POST /users
-  # ============================================================
+  # ==========================================================
 
   UserFunction:
     Type: AWS::Serverless::Function
@@ -85,14 +117,14 @@ Resources:
             Method: post
 
 
-  # ============================================================
+  # ==========================================================
   # RESUME UPLOAD FUNCTION
   #
   # POST /resume/upload-url
   #
-  # Generates presigned URL.
+  # Generates a presigned URL.
   # Frontend uploads PDF directly to S3.
-  # ============================================================
+  # ==========================================================
 
   ResumeFunction:
     Type: AWS::Serverless::Function
@@ -118,21 +150,19 @@ Resources:
             Method: post
 
 
-  # ============================================================
+  # ==========================================================
   # RESUME PROCESSOR FUNCTION
   #
-  # Triggered by EventBridge after PDF upload.
-  #
   # S3
-  #  ↓
+  #   ↓
   # EventBridge
-  #  ↓
+  #   ↓
   # ResumeProcessorFunction
-  #  ↓
+  #   ↓
   # Groq
-  #  ↓
-  # DynamoDB
-  # ============================================================
+  #   ↓
+  # DynamoDB Users
+  # ==========================================================
 
   ResumeProcessorFunction:
     Type: AWS::Serverless::Function
@@ -147,11 +177,15 @@ Resources:
           GROQ_SECRET_NAME: internpilot/groq-api-key
 
       Policies:
-
-        # DynamoDB access
         - DynamoDBCrudPolicy:
-            TableName: !Ref UsersTable
+            TableName: !Ref JobsTable
 
+        - Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:internpilot/job-api-key*"
         # S3 read access
         - S3ReadPolicy:
             BucketName: !Ref ResumeBucket
@@ -167,7 +201,7 @@ Resources:
                 - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:internpilot/groq-api-key*"
 
 
-  # ============================================================
+  # ==========================================================
   # EVENTBRIDGE RULE
   #
   # Detects new objects uploaded to ResumeBucket.
@@ -177,7 +211,7 @@ Resources:
   # resumes/
   #
   # are processed.
-  # ============================================================
+  # ==========================================================
 
   ResumeUploadEventRule:
     Type: AWS::Events::Rule
@@ -206,26 +240,57 @@ Resources:
               - prefix: resumes/
 
       Targets:
-
         - Arn: !GetAtt ResumeProcessorFunction.Arn
           Id: ResumeProcessorTarget
 
 
-  # ============================================================
-  # ALLOW EVENTBRIDGE TO INVOKE LAMBDA
-  # ============================================================
+  # ==========================================================
+  # ALLOW EVENTBRIDGE TO INVOKE RESUME PROCESSOR
+  # ==========================================================
 
   ResumeProcessorEventBridgePermission:
     Type: AWS::Lambda::Permission
 
     Properties:
       FunctionName: !Ref ResumeProcessorFunction
-
       Action: lambda:InvokeFunction
-
       Principal: events.amazonaws.com
-
       SourceArn: !GetAtt ResumeUploadEventRule.Arn
+
+
+  # ==========================================================
+  # JOB INGESTION FUNCTION
+  #
+  # Temporary test version.
+  #
+  # POST /jobs/ingest
+  #
+  # Inserts a sample job into DynamoDB.
+  # ==========================================================
+
+  JobIngestionFunction:
+    Type: AWS::Serverless::Function
+
+    Properties:
+      CodeUri: job_ingestion/
+      Handler: app.lambda_handler
+
+      Environment:
+        Variables:
+          JOBS_TABLE: !Ref JobsTable
+
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobsTable
+
+      Events:
+
+        IngestJobs:
+          Type: Api
+
+          Properties:
+            Path: /jobs/ingest
+            Method: post
 
 
 # ============================================================
@@ -234,9 +299,9 @@ Resources:
 
 Outputs:
 
-  # ============================================================
+  # ==========================================================
   # USER API
-  # ============================================================
+  # ==========================================================
 
   UserApi:
     Description: User API endpoint
@@ -246,9 +311,9 @@ Outputs:
       - {}
 
 
-  # ============================================================
+  # ==========================================================
   # RESUME API
-  # ============================================================
+  # ==========================================================
 
   ResumeApi:
     Description: Resume Upload API endpoint
@@ -258,9 +323,9 @@ Outputs:
       - {}
 
 
-  # ============================================================
-  # DYNAMODB
-  # ============================================================
+  # ==========================================================
+  # DYNAMODB USERS TABLE
+  # ==========================================================
 
   DynamoDBTable:
     Description: InternPilot Users DynamoDB Table
@@ -268,9 +333,19 @@ Outputs:
     Value: !Ref UsersTable
 
 
-  # ============================================================
+  # ==========================================================
+  # DYNAMODB JOBS TABLE
+  # ==========================================================
+
+  JobsDynamoDBTable:
+    Description: InternPilot Jobs DynamoDB Table
+
+    Value: !Ref JobsTable
+
+
+  # ==========================================================
   # S3 BUCKET
-  # ============================================================
+  # ==========================================================
 
   ResumeBucketName:
     Description: InternPilot Resume S3 Bucket
@@ -278,11 +353,21 @@ Outputs:
     Value: !Ref ResumeBucket
 
 
-  # ============================================================
+  # ==========================================================
   # RESUME PROCESSOR
-  # ============================================================
+  # ==========================================================
 
   ResumeProcessorFunctionName:
     Description: Resume Processor Lambda Function
 
     Value: !Ref ResumeProcessorFunction
+
+
+  # ==========================================================
+  # JOB INGESTION FUNCTION
+  # ==========================================================
+
+  JobIngestionFunctionName:
+    Description: Job Ingestion Lambda Function
+
+    Value: !Ref JobIngestionFunction
